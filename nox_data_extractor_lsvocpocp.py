@@ -21,8 +21,9 @@ def extract_data(INPUT_FILE):
         #1D00000008000006 1.5V adc164
         #1E0000DC05000006 1.5V time since start for 10Hz OCP? followed by probably offset data for 743 rows
         #3C0100B003000006 1.5V positive LSV
-        print(list(re.finditer(b"[^\x00][\x00\x01]\x00[\x00\x3A\x60\xB0][^\x00]\x00\x00\x06", b'\x3C\x01\x00\xB0\x03\x00\x00\x06')))
-        matches = list(re.finditer(b"[^\x00][\x00\x01]\x00[\x00\x3A\x60\xB0][^\x00]\x00\x00\x06", contents)) + list(re.finditer(b"[^\x00]\x00\x00[\xE0-\xFF]\x00\x00\x00\x06", contents))
+        #900100D001000006 1V lsv0 time
+        print(list(re.finditer(b"[^\x00][\x00\x01]\x00[\x00\x3A\x60\xB0\xD0][^\x00]\x00\x00\x06", b'\x3C\x01\x00\xB0\x03\x00\x00\x06')))
+        matches = list(re.finditer(b"[^\x00][\x00\x01]\x00[\x00\x3A\x60\xB0\xD0][^\x00]\x00\x00\x06", contents)) + list(re.finditer(b"[^\x00]\x00\x00[\xE0-\xFF]\x00\x00\x00\x06", contents))
         for match in matches:
             start = match.start()
 
@@ -73,10 +74,18 @@ def extract_data(INPUT_FILE):
         # Delete columns with near constant 0.00244 step
         def prox_count(a, tgt1, tgt2, tol):
             return sum(abs(abs(x) - tgt1) < tol or abs(abs(x) - tgt2) < tol for x in a)
-        data = [x for x in data if not(prox_count(np.diff(x), 0.00244, 0.00245, 0.000002)/len(x) > 0.99 and prox_count([round(x[0], 1) - x[0]], 0.00241, 0.00250, 0.00001))]
+        data = [x for x in data if not(prox_count(np.diff(x), 0.00244, 0.00245, 0.000002)/len(x) > 0.99)]
         print([len(d) for d in data])
         print(len(data))
         print(data[0])
+
+        # Separate columns based on length of data
+        temp_dict = {k:[] for k in set([len(x) for x in data])}
+        for x in data:
+            temp_dict[len(x)].append(x)
+        data = [x for groups in reversed(temp_dict.values()) for x in groups]
+        print([len(d) for d in data])
+        print(len(data))
         # [Record Signals(time, current, pxv, wev), OCP10Hz(time, wev, pxv, current), {OCP1Hz}] * 3, [LSV(Voltage applied)] * 3, [LSV(time, current, potential, voltage)]
         # Group into trials and sort
         data = [data[i:i + 4] for i in range(0, len(data), 4)]
