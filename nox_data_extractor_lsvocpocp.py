@@ -5,9 +5,7 @@ from collections import Counter
 import pandas
 import numpy as np
 
-if __name__ == "__main__":
-    INPUT_FILE = r"C:\Users\user\Downloads\2025_summer_research_data\raw data\2025_08_04\Alternating Automated Voltage Recovery Whole Cell 0.5V with 50s 0V2hrshort 8.03 overnight.nox"#r"C:\Users\user\Downloads\2025_summer_research_data\raw data\2025_08_05\Alternating Automated Voltage Recovery Whole Cell 1.5V with 50s 0V2hrshort 8.04 overnight.nox"#"C:\Users\user\Downloads\2025_summer_research_data\raw data\2025_08_22\Whole Cell +1V7200s 1sdischarge 0V2hrshort 8.21 overnight.nox"
-    OUTPUT_FILE = r'C:\Users\user\Downloads\8.03overnight_unsorted.xlsx'#'C:\Users\user\Downloads\8.21overnight.xlsx'
+def extract_data(INPUT_FILE):
     NUMBER_OF_DATA_POINTS = 0
 
     with open(INPUT_FILE, 'rb') as f:
@@ -31,13 +29,13 @@ if __name__ == "__main__":
             end = 0
             if not NUMBER_OF_DATA_POINTS:
                 next_match = re.match(b'[^\x00]\x00\x00\x00[^\x00]\x00\x00\x06', contents[start + 8:])
-                print(next_match.start() if next_match else -1, contents.find(b'\x00' * 200, start + 8))
+                #print(next_match.start() if next_match else -1, contents.find(b'\x00' * 200, start + 8))
 
                 zero_count = 1
                 begin = contents.find(b'\x00' * 150, start + 8)
                 while contents[begin + zero_count * 8:begin + zero_count*8 + 8] == b'\x00'*8:
                     zero_count += 1
-                print(zero_count)
+                #print(zero_count)
 
                 end = min(start + 8 + (next_match.start() if next_match else float('inf')), contents.find(b'\x00' * 150, start + 8))
             else:
@@ -69,13 +67,13 @@ if __name__ == "__main__":
         mode = Counter(data_discretized).most_common(1)[0]
         print(mode)
         data = [x for x in data if tuple([abs(y) for y in x[:20]]) != mode[0]]'''
+        # Delete mistaken columns with unique length or 0 length
+        len_counts = Counter([len(x) for x in data])
+        data = [x for x in data if len(x) > 0 and len_counts[len(x)] > 1]
         # Delete columns with near constant 0.00244 step
         def prox_count(a, tgt1, tgt2, tol):
             return sum(abs(abs(x) - tgt1) < tol or abs(abs(x) - tgt2) < tol for x in a)
-        data = [x for x in data if not(prox_count(np.diff(x), 0.00244, 0.00245, 0.000002)/len(x) > 0.99 and prox_count([round(x[0], 1) - x[0]], 0.00250, 0.00250, 0.00001))]
-        # Delete mistaken columns with unique length
-        len_counts = Counter([len(x) for x in data])
-        data = [x for x in data if len_counts[len(x)] > 1]
+        data = [x for x in data if not(prox_count(np.diff(x), 0.00244, 0.00245, 0.000002)/len(x) > 0.99 and prox_count([round(x[0], 1) - x[0]], 0.00241, 0.00250, 0.00001))]
         print([len(d) for d in data])
         print(len(data))
         print(data[0])
@@ -96,11 +94,25 @@ if __name__ == "__main__":
         print(list(round(x[0], 1) - x[0] for x in data))
         #print(np.diff(data[0]))
 
-        from openpyxl import Workbook
+        return data
 
-        # Create a new Excel workbook and select the active sheet
-        wb = Workbook()
-        ws = wb.active
+if __name__ == "__main__":
+    points = {
+        0.5: r"C:\Users\user\Downloads\2025_summer_research_data\raw data\2025_08_04\Alternating Automated Voltage Recovery Whole Cell 0.5V with 50s 0V2hrshort 8.03 overnight.nox",
+        1: r"C:\Users\user\Downloads\2025_summer_research_data\raw data\2025_08_07\Alternating Automated Voltage Recovery Whole Cell 1V with 50s 0V2hrshort 8.06 overnight.nox",
+        1.5: r"C:\Users\user\Downloads\2025_summer_research_data\raw data\2025_08_05\Alternating Automated Voltage Recovery Whole Cell 1.5V with 50s 0V2hrshort 8.04 overnight.nox",
+        2: r"C:\Users\user\Downloads\2025_summer_research_data\raw data\2025_08_06\Alternating Automated Voltage Recovery Whole Cell 2V with 50s 0V2hrshort 8.05 overnight.nox",
+    }
+
+    OUTPUT_FILE = r'C:\Users\user\Downloads\Voltage Recovery Project - Voltage Magnitude.xlsx'
+    from openpyxl import Workbook
+
+    # Create a new Excel workbook and select the active sheet
+    wb = Workbook()
+
+    for dp, ifile in points.items():
+        data = extract_data(ifile)
+        ws = wb.create_sheet(title=f"{dp}V50s 0V2hr {ifile[-18:-16]}ov")
 
         # Define your column headers
         headers = (
@@ -117,24 +129,7 @@ if __name__ == "__main__":
             row = [d[i] if i < len(d) else '' for d in data]
             ws.append(row)
 
-        # Save the workbook
-        wb.save(OUTPUT_FILE)
-        import sys
-        sys.exit()
-
-        # Write extracted data
-        with open(OUTPUT_FILE, 'w') as o:
-            import sys
-            sys.exit()
-            o.write(
-                ('Time (s),WE(1).Current (A),pX(1).Voltage (V),WE(1).Potential (V),'
-                 + 'Time (s),WE(1).Current (A),WE(1).Potential (V),pX(1).Voltage (V),'
-                 + 'Time (s),WE(1).Potential (V),pX(1).Voltage (V),WE(1).Current (A),' * 2)
-                * (len(data) // 4) + '\n')
-
-            print(len(data))
-            print([len(d) for d in data])
-
-            for i in range(max(len(d) for d in data)):
-                line = ','.join(str(d[i]) if i < len(d) else '' for d in data)
-                o.write(line + '\n')
+    # Save the workbook
+    wb.save(OUTPUT_FILE)
+    import sys
+    sys.exit()
